@@ -1,33 +1,16 @@
-# NEXUS Frontend
+# React + Vite
 
-React-based dashboard for the NEXUS platform.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-## Pages
+Currently, two official plugins are available:
 
-- **Repo Overview** — Repository listing, stats, and status
-- **Dependency Graph** — Interactive graph visualization (D3/Cytoscape)
-- **Semantic Search** — Search code by meaning, not just text
-- **AI Chat** — Conversational interface to query your codebase
-- **PR Insights** — AI-powered pull request analysis
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-## Tech Stack
+## React Compiler
 
-- React 18
-- Vite
-- React Router v6
-- Cytoscape.js (graph visualization)
-- Tailwind CSS (utility styling)
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-## Running
+## Expanding the ESLint configuration
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VITE_API_URL` | `http://localhost:8000` | Gateway API URL |
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
