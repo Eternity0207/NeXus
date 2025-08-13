@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.middleware import RequestLoggingMiddleware
+from app.error_handler import ErrorHandlerMiddleware
 from app.models import HealthResponse
 from app.routes import repos, search, chat, graph, pr
 
@@ -56,6 +57,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(ErrorHandlerMiddleware)
 
 # ─── Routes ──────────────────────────────────────────────────────────────────
 
