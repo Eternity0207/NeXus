@@ -82,34 +82,66 @@ NEXUS is a production-grade platform that ingests source code repositories, buil
 ## Quick Start
 
 ```bash
-# Start infrastructure (Kafka, Neo4j, ChromaDB)
-docker-compose -f docker/docker-compose.infra.yml up -d
+# 1. Clone and configure
+git clone https://github.com/Eternity0207/NeXus.git
+cd NeXus
+cp .env.example .env
 
-# Start all services
-docker-compose -f docker/docker-compose.services.yml up -d
+# 2. Start infrastructure (Kafka, Neo4j, ChromaDB, Redis)
+make infra
 
-# Start frontend
-cd frontend && npm run dev
+# 3. Create Kafka topics
+make topics
+
+# 4. Start all services (Docker)
+make services
+
+# 5. Start frontend
+cd frontend && npm install && npm run dev
+```
+
+### Development Mode
+
+```bash
+# Run services individually with hot-reload
+make run-gateway      # :8000
+make run-ingestion    # :8001
+make run-parser       # :8002
+make run-embedding    # :8003
+make run-graph        # :8004
+make run-ai           # :8005
+make run-search       # :8006
+
+# Check health of all services
+make health
 ```
 
 ## Project Structure
 
 ```
 nexus/
-├── gateway-service/
-├── ingestion-service/
-├── parser-service/
-├── embedding-service/
-├── graph-service/
-├── ai-service/
-├── search-service/
-├── frontend/
-├── shared/                  # Shared schemas, Kafka utilities
-├── docker/                  # Docker Compose files
-├── docs/                    # Architecture docs
-└── README.md
+├── gateway-service/         # API gateway, routing, rate limiting
+├── ingestion-service/       # Repository cloning, file extraction
+├── parser-service/          # AST parsing (Python, JS/TS)
+├── embedding-service/       # Vector generation, ChromaDB storage
+├── graph-service/           # Neo4j graph builder and query APIs
+├── ai-service/              # LLM integration, PR review, chat
+├── search-service/          # Semantic code search (RAG)
+├── frontend/                # React + Vite dashboard
+├── shared/                  # Kafka utilities, schemas, base consumer
+├── scripts/                 # Kafka topics, health checks
+├── docker/                  # Infrastructure & services compose
+├── docs/                    # Architecture documentation
+├── Makefile                 # Development workflow commands
+├── .env.example             # Environment configuration template
+├── CONTRIBUTING.md          # Development guide
+└── LICENSE                  # MIT License
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and extension guides.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE) for details.
