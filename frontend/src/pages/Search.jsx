@@ -1,12 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
 
-const mockResults = [
-  { file_path: 'app/services/auth.py', content: 'async def authenticate_user(email: str, password: str):\n    """Verify user credentials and return JWT token."""\n    user = await db.users.find_one({"email": email})\n    if not user or not verify_password(password, user.hashed_password):\n        raise HTTPException(status_code=401)\n    return create_access_token(user.id)', score: 0.94, metadata: { type: 'function', name: 'authenticate_user', language: 'python' } },
-  { file_path: 'app/middleware/jwt.py', content: 'def verify_token(token: str) -> dict:\n    """Decode and validate a JWT token."""\n    try:\n        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])\n        return payload\n    except jwt.ExpiredSignatureError:\n        raise HTTPException(status_code=401, detail="Token expired")', score: 0.87, metadata: { type: 'function', name: 'verify_token', language: 'python' } },
-  { file_path: 'app/models/user.py', content: 'class User(BaseModel):\n    id: str\n    email: str\n    hashed_password: str\n    is_active: bool = True\n    created_at: datetime = Field(default_factory=datetime.utcnow)', score: 0.79, metadata: { type: 'class', name: 'User', language: 'python' } },
-];
-
 export default function Search() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -22,9 +16,9 @@ export default function Search() {
 
     try {
       const data = await api.search(query);
-      setResults(data?.results || mockResults);
+      setResults(data?.results || []);
     } catch {
-      setResults(mockResults);
+      setResults([]);
     }
 
     setLoading(false);
@@ -71,10 +65,20 @@ export default function Search() {
         </div>
       )}
 
+      {!loading && !searched && (
+        <div className="empty-state">
+          <div className="empty-state-icon">🔍</div>
+          <p>Search your codebase using natural language.</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+            Ingest a repository first, then search across functions, classes, and files.
+          </p>
+        </div>
+      )}
+
       {!loading && searched && results.length === 0 && (
         <div className="empty-state">
           <div className="empty-state-icon">🔍</div>
-          <p>No results found. Try a different query.</p>
+          <p>No results found. Try a different query or ingest a repository first.</p>
         </div>
       )}
 

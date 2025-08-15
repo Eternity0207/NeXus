@@ -3,11 +3,11 @@ import { api } from '../api';
 
 export default function Chat() {
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Hello! I\'m **NEXUS AI** — your codebase intelligence assistant.\n\nI can help you understand your code, find functions, explain architecture, and suggest improvements. What would you like to know?' },
+    { role: 'assistant', content: 'Hello! I\'m **NEXUS AI** — your codebase intelligence assistant.\n\nI can help you understand your code, find functions, explain architecture, and suggest improvements.\n\nIngest a repository first, then ask me anything about it.' },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [repoId] = useState('demo-1');
+  const [repoId, setRepoId] = useState('');
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -24,25 +24,14 @@ export default function Chat() {
     setLoading(true);
 
     try {
-      const data = await api.chat(userMsg, repoId);
-      const reply = data?.reply || getMockReply(userMsg);
+      const data = await api.chat(userMsg, repoId || 'default');
+      const reply = data?.reply || 'Sorry, I couldn\'t process that request. Make sure the backend services are running.';
       setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
     } catch {
-      const reply = getMockReply(userMsg);
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Unable to connect to the AI service. Please ensure all backend services are running.' }]);
     }
 
     setLoading(false);
-  };
-
-  const getMockReply = (query) => {
-    if (query.toLowerCase().includes('auth')) {
-      return 'The authentication flow is handled in `app/services/auth.py`. It uses **JWT tokens** with HS256 signing.\n\n**Key functions:**\n- `authenticate_user()` — verifies credentials against the database\n- `create_access_token()` — generates signed JWT with expiration\n- `verify_token()` — middleware for protected routes\n\nThe token expiry is set to 24 hours by default (configurable via `TOKEN_EXPIRE_HOURS`).';
-    }
-    if (query.toLowerCase().includes('database') || query.toLowerCase().includes('db')) {
-      return 'The database layer uses **async SQLAlchemy** with PostgreSQL.\n\n**Connection pooling** is configured in `app/config.py`:\n```python\npool_size=20\nmax_overflow=10\npool_timeout=30\n```\n\nModels are defined in `app/models/` using Pydantic for validation and SQLAlchemy for ORM.';
-    }
-    return 'Based on the codebase analysis, this project follows a **clean architecture pattern** with clear separation between:\n\n1. **API layer** (`routes/`) — request handling and validation\n2. **Service layer** (`services/`) — business logic\n3. **Data layer** (`models/`, `repositories/`) — database operations\n\nWould you like me to dive deeper into any specific component?';
   };
 
   const formatContent = (text) => {
