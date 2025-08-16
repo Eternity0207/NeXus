@@ -1,12 +1,13 @@
 #!/bin/bash
 # ─── NEXUS Kafka Topic Setup ────────────────────────────────────────────────
-# Creates all required Kafka topics with appropriate configurations.
+# Creates all required Kafka topics via the Kafka container.
 # Run this after Kafka is up: ./scripts/create-topics.sh
 # ─────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
 
-KAFKA_BROKER="${KAFKA_BROKER:-localhost:9092}"
+KAFKA_CONTAINER="${KAFKA_CONTAINER:-nexus-kafka}"
+KAFKA_BROKER="localhost:9092"
 
 topics=(
   "repo.ingested:3:1"
@@ -17,7 +18,7 @@ topics=(
 )
 
 echo "🔧 Creating NEXUS Kafka topics..."
-echo "   Broker: $KAFKA_BROKER"
+echo "   Container: $KAFKA_CONTAINER"
 echo ""
 
 for entry in "${topics[@]}"; do
@@ -25,7 +26,8 @@ for entry in "${topics[@]}"; do
 
   echo -n "   Creating $topic (partitions=$partitions) ... "
 
-  kafka-topics --bootstrap-server "$KAFKA_BROKER" \
+  docker exec "$KAFKA_CONTAINER" \
+    kafka-topics --bootstrap-server "$KAFKA_BROKER" \
     --create \
     --topic "$topic" \
     --partitions "$partitions" \
@@ -36,7 +38,7 @@ done
 
 echo ""
 echo "📋 Listing all topics:"
-kafka-topics --bootstrap-server "$KAFKA_BROKER" --list 2>/dev/null
+docker exec "$KAFKA_CONTAINER" kafka-topics --bootstrap-server "$KAFKA_BROKER" --list 2>/dev/null || echo "   (could not list)"
 
 echo ""
 echo "✅ Kafka topic setup complete"

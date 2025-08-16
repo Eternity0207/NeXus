@@ -1,13 +1,11 @@
-version: "3.9"
-
 services:
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: nexus-kafka
     hostname: kafka
+    user: "0:0"
     ports:
       - "9092:9092"
-      - "9101:9101"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT
@@ -20,16 +18,18 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_JMX_PORT: 9101
-      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
-      CLUSTER_ID: nexus-kafka-cluster-001
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
     volumes:
-      - kafka_data:/tmp/kraft-combined-logs
+      - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    networks:
+      - nexus-network
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -42,6 +42,8 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+    networks:
+      - nexus-network
 
   neo4j:
     image: neo4j:5.12
@@ -59,9 +61,12 @@ services:
       - neo4j_logs:/logs
     healthcheck:
       test: ["CMD", "neo4j", "status"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - nexus-network
 
   chromadb:
     image: chromadb/chroma:latest
@@ -72,12 +77,14 @@ services:
       - chroma_data:/chroma/chroma
     environment:
       ANONYMIZED_TELEMETRY: "false"
+    networks:
+      - nexus-network
 
   redis:
     image: redis:7-alpine
     container_name: nexus-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -85,6 +92,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - nexus-network
 
 volumes:
   kafka_data:
@@ -94,5 +103,5 @@ volumes:
   redis_data:
 
 networks:
-  default:
+  nexus-network:
     name: nexus-network

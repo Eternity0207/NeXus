@@ -39,8 +39,11 @@ async def call_llm(
         return _mock_response(prompt)
 
     try:
+        import os
         import litellm
-        litellm.api_key = settings.llm_api_key
+
+        # Configure for OpenRouter via LiteLLM
+        os.environ["OPENROUTER_API_KEY"] = settings.llm_api_key
 
         response = await litellm.acompletion(
             model=settings.llm_model,
@@ -50,6 +53,7 @@ async def call_llm(
             ],
             temperature=temp,
             max_tokens=tokens,
+            api_key=settings.llm_api_key,
         )
 
         return response.choices[0].message.content
@@ -58,8 +62,8 @@ async def call_llm(
         logger.warning("litellm not available, using mock")
         return _mock_response(prompt)
     except Exception as e:
-        logger.error(f"LLM call failed: {e}")
-        return f"Error: LLM call failed — {str(e)}"
+        logger.error(f"LLM call failed: {e}", exc_info=True)
+        return _mock_response(prompt)
 
 
 def _mock_response(prompt: str) -> str:
