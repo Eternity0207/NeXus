@@ -58,6 +58,8 @@ class KafkaConsumer:
             "enable.auto.commit": kafka_config.enable_auto_commit,
         })
         self._consumer.subscribe(topics)
+        self._group_id = group_id
+        self._topics = topics
         self._running = False
 
     def consume(
@@ -67,7 +69,7 @@ class KafkaConsumer:
     ) -> None:
         """Start consuming messages, calling handler for each."""
         self._running = True
-        logger.info(f"Consumer started for group '{self._consumer}'")
+        logger.info(f"Consumer started for group '{self._group_id}' on {self._topics}")
 
         try:
             while self._running:
