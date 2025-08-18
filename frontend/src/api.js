@@ -1,4 +1,25 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// ─── API Client ─────────────────────────────────────────────────────────────
+// In local dev and production we talk to the gateway through a reverse proxy
+// (Caddy) that exposes gateway.<host>. Override with VITE_API_URL if needed.
+
+const API_BASE = (() => {
+  const env = import.meta.env.VITE_API_URL;
+  if (env) return env.replace(/\/$/, '');
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname, port } = window.location;
+    if (hostname === 'nexus.localhost') {
+      return `${protocol}//gateway.localhost`;
+    }
+    if (hostname.endsWith('.localhost')) {
+      return `${protocol}//gateway.localhost`;
+    }
+    if (port === '5173' || port === '3000') {
+      return 'http://localhost:8000';
+    }
+    return `${protocol}//gateway.${hostname.replace(/^(nexus\.|www\.)/, '')}`;
+  }
+  return 'http://localhost:8000';
+})();
 
 async function request(path, options = {}) {
   const url = `${API_BASE}${path}`;
@@ -24,7 +45,6 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  // Repos
   listRepos: () => request('/api/v1/repos'),
   getRepo: (id) => request(`/api/v1/repos/${id}`),
   ingestRepo: (repoUrl, branch = 'main') =>
@@ -33,31 +53,26 @@ export const api = {
       body: JSON.stringify({ repo_url: repoUrl, branch }),
     }),
 
-  // Search
   search: (query, repoId = null, topK = 10) =>
     request('/api/v1/search', {
       method: 'POST',
       body: JSON.stringify({ query, repo_id: repoId, top_k: topK }),
     }),
 
-  // Chat
   chat: (message, repoId, conversationId = null) =>
     request('/api/v1/chat', {
       method: 'POST',
       body: JSON.stringify({ message, repo_id: repoId, conversation_id: conversationId }),
     }),
 
-  // Graph
   getGraph: (repoId, depth = 2, nodeType = 'all') =>
     request(`/api/v1/graph/${repoId}?depth=${depth}&node_type=${nodeType}`),
 
-  // PR Analysis
   analyzePR: (repoId, prUrl) =>
     request('/api/v1/pr/analyze', {
       method: 'POST',
       body: JSON.stringify({ repo_id: repoId, pr_url: prUrl }),
     }),
 
-  // Health
   health: () => request('/health'),
 };
