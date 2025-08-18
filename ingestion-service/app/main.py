@@ -113,9 +113,12 @@ async def get_repo_status(repo_id: str) -> dict:
 async def list_repos() -> dict:
     """List all ingested repositories and their statuses."""
     repos = repo_store.list_all()
+    payload = [r.model_dump() for r in repos]
+    total_files = sum(r.file_count for r in repos)
     return {
         "total": len(repos),
-        "repositories": [r.model_dump() for r in repos],
+        "repos": payload,
+        "total_files": total_files,
     }
 
 
