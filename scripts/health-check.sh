@@ -58,8 +58,8 @@ printf "   %-20s" "ChromaDB (:8100)"
 if curl -s -o /dev/null --connect-timeout 2 "http://localhost:8100/api/v1/heartbeat" 2>/dev/null; then echo "✅ reachable"; else echo "❌ unreachable"; all_healthy=false; fi
 
 # Redis
-printf "   %-20s" "Redis (:6379)"
-if nc -z localhost 6379 2>/dev/null; then echo "✅ reachable"; else echo "❌ unreachable"; all_healthy=false; fi
+printf "   %-20s" "Redis (:6380)"
+if nc -z localhost 6380 2>/dev/null; then echo "✅ reachable"; else echo "❌ unreachable"; all_healthy=false; fi
 
 echo "════════════════════════════════════════"
 
