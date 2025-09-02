@@ -105,13 +105,27 @@ def get_file_dependencies(repo_id: str, file_path: str) -> dict:
         {"path": file_path, "repo_id": repo_id},
     )
 
+    # A file is "imported by" another when the other's IMPORTS edge targets a
+    # Module node whose name resolves (roughly) to this file's path. We match
+    # on the path stem (drop extension + leading dirs) since import syntax
+    # across languages rarely encodes the full repo-relative path.
+    from pathlib import PurePosixPath
+    stem = PurePosixPath(file_path).with_suffix("").as_posix()
+    module_candidates = {
+        file_path,
+        stem,
+        stem.replace("/", "."),
+        PurePosixPath(file_path).name,
+        PurePosixPath(file_path).stem,
+    }
+
     imported_by = run_query(
         """
-        MATCH (other:File)-[:IMPORTS]->(m:Module {name: $module_ref, repo_id: $repo_id})
-        WHERE other.path <> $path
-        RETURN other.path as file_path
+        MATCH (other:File)-[:IMPORTS]->(m:Module {repo_id: $repo_id})
+        WHERE other.path <> $path AND m.name IN $candidates
+        RETURN DISTINCT other.path as file_path
         """,
-        {"path": file_path, "module_ref": file_path, "repo_id": repo_id},
+        {"path": file_path, "candidates": list(module_candidates), "repo_id": repo_id},
     )
 
     return {
