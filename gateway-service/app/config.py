@@ -35,8 +35,15 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 100
     rate_limit_window_seconds: int = 60
 
-    # CORS
-    allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    # CORS — include the Caddy subdomain setup used in dev and production
+    allowed_origins: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://nexus.localhost",
+        "https://nexus.localhost",
+    ]
+    # Regex for additional origins (e.g. all *.localhost subdomains + prod host)
+    allowed_origin_regex: str = r"https?://([a-z0-9-]+\.)?(localhost|nexus\.local)(:\d+)?"
 
     class Config:
         env_file = ".env"
