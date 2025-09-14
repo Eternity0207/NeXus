@@ -6,19 +6,23 @@ import logging
 from typing import Optional
 
 import chromadb
-from chromadb.config import Settings as ChromaSettings
 
 from app.config import get_settings
 
 logger = logging.getLogger("embedding-service")
 settings = get_settings()
 
-_client: Optional[chromadb.HttpClient] = None
+_client = None
 _collection = None
 
 
-def get_chroma_client() -> chromadb.HttpClient:
-    """Get or create the ChromaDB HTTP client."""
+def get_chroma_client():
+    """Get or create the ChromaDB HTTP client.
+
+    Falls back to a persistent local client under ./data/chroma so the
+    embedding and search services can still share a vector store even if
+    the Docker-hosted Chroma instance is unreachable.
+    """
     global _client
     if _client is None:
         try:
@@ -26,12 +30,11 @@ def get_chroma_client() -> chromadb.HttpClient:
                 host=settings.chroma_host,
                 port=settings.chroma_port,
             )
-            # Test connection
             _client.heartbeat()
             logger.info(f"Connected to ChromaDB at {settings.chroma_host}:{settings.chroma_port}")
         except Exception as e:
-            logger.warning(f"ChromaDB unavailable ({e}), using ephemeral client")
-            _client = chromadb.EphemeralClient()
+            logger.warning(f"ChromaDB HTTP unavailable ({e}), falling back to persistent local store")
+            _client = chromadb.PersistentClient(path="./data/chroma")
     return _client
 
 

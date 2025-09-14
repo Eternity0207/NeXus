@@ -12,7 +12,7 @@ from app.config import get_settings
 logger = logging.getLogger("search-service")
 settings = get_settings()
 
-_client: Optional[chromadb.HttpClient] = None
+_client = None
 _collection = None
 _model = None
 
@@ -28,8 +28,8 @@ def _get_client():
             _client.heartbeat()
             logger.info(f"Connected to ChromaDB at {settings.chroma_host}:{settings.chroma_port}")
         except Exception as e:
-            logger.warning(f"ChromaDB unavailable ({e}), using ephemeral")
-            _client = chromadb.EphemeralClient()
+            logger.warning(f"ChromaDB HTTP unavailable ({e}), falling back to persistent local store")
+            _client = chromadb.PersistentClient(path="./data/chroma")
     return _client
 
 
