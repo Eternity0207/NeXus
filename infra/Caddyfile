@@ -1,0 +1,59 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# NEXUS — Caddyfile
+#
+# One config for both local dev and production. Caddy auto-provisions HTTPS
+# for any domain it can reach (public server), and transparently serves HTTP
+# for *.localhost while your browser still trusts the hostname.
+#
+# Usage (dev):
+#     caddy run --config infra/Caddyfile
+#     open http://nexus.localhost
+#
+# Usage (prod):
+#     1. Point A/AAAA records for <domain> and *.<domain> at your server.
+#     2. Replace every occurrence of `localhost` below with your apex domain
+#        (or set {$NEXUS_DOMAIN} in the environment and leave the file alone).
+#     3. sudo caddy run --config /etc/caddy/Caddyfile
+# ═══════════════════════════════════════════════════════════════════════════
+
+{
+    # Bind admin API to loopback only
+    admin localhost:2019
+    # Comment out the line below in production — Caddy will get a real cert
+    auto_https disable_redirects
+}
+
+# ─── Frontend (React dashboard) ────────────────────────────────────────────
+nexus.localhost, nexus.{$NEXUS_DOMAIN:localhost} {
+    encode gzip zstd
+    reverse_proxy localhost:5173 {
+        header_up Host {host}
+        header_up X-Forwarded-Host {host}
+    }
+}
+
+# ─── API Gateway (public REST entrypoint) ──────────────────────────────────
+gateway.localhost, gateway.{$NEXUS_DOMAIN:localhost}, api.localhost {
+    encode gzip zstd
+    @cors_preflight method OPTIONS
+    handle @cors_preflight {
+        header Access-Control-Allow-Origin "{http.request.header.Origin}"
+        header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        header Access-Control-Allow-Headers "Content-Type, Authorization, X-Request-ID"
+        header Access-Control-Allow-Credentials "true"
+        respond 204
+    }
+    reverse_proxy localhost:8000
+}
+
+# ─── Internal services (exposed for devs/debugging, NOT for public prod) ───
+ingestion.localhost { reverse_proxy localhost:8001 }
+parser.localhost    { reverse_proxy localhost:8002 }
+embedding.localhost { reverse_proxy localhost:8003 }
+graph.localhost     { reverse_proxy localhost:8004 }
+ai.localhost        { reverse_proxy localhost:8005 }
+search.localhost    { reverse_proxy localhost:8006 }
+
+# ─── Infrastructure dashboards ─────────────────────────────────────────────
+kafka.localhost { reverse_proxy localhost:8080 }
+neo4j.localhost { reverse_proxy localhost:7474 }
