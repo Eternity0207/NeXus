@@ -1,13 +1,17 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════════════
-# NEXUS — Full System Bootstrap Script
-# Purges everything, clears ports, rebuilds, and starts the entire platform.
+# NEXUS — System Bootstrap
 #
-# Usage:
-#   ./nexus.sh          # Full clean start
-#   ./nexus.sh start    # Start without purging
-#   ./nexus.sh stop     # Stop everything
-#   ./nexus.sh status   # Check status
+# Starts the whole platform natively on the host machine. Only the four
+# stateful infra services (Kafka, Neo4j, ChromaDB, Redis) run in Docker;
+# every NEXUS service is a plain Python process and Caddy exposes them on
+# *.localhost subdomains.
+#
+#   ./nexus.sh            # purge + start everything
+#   ./nexus.sh start      # start without purging (reuses infra volumes)
+#   ./nexus.sh stop       # stop everything
+#   ./nexus.sh status     # health summary
+#   ./nexus.sh logs <svc> # tail a service's log
 # ═══════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
@@ -22,84 +26,104 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+LOG_DIR="${SCRIPT_DIR}/.logs"
+PID_DIR="${SCRIPT_DIR}/.pids"
+VENV_DIR="${SCRIPT_DIR}/.venv"
+mkdir -p "$LOG_DIR" "$PID_DIR"
+
 log()   { echo -e "${CYAN}[NEXUS]${NC} $1"; }
 ok()    { echo -e "${GREEN}  ✅ $1${NC}"; }
 warn()  { echo -e "${YELLOW}  ⚠️  $1${NC}"; }
 fail()  { echo -e "${RED}  ❌ $1${NC}"; }
 
-# ─── Stop Everything ─────────────────────────────────────────────────────
+SERVICES=(
+  "gateway-service:8000"
+  "ingestion-service:8001"
+  "parser-service:8002"
+  "embedding-service:8003"
+  "graph-service:8004"
+  "ai-service:8005"
+  "search-service:8006"
+)
+
+# ─── Helpers ─────────────────────────────────────────────────────────────
+
+load_env() {
+  if [ -f .env ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source .env
+    set +a
+  fi
+}
+
+ensure_venv() {
+  if [ ! -d "$VENV_DIR" ]; then
+    log "Creating Python virtualenv at .venv"
+    python3 -m venv "$VENV_DIR"
+  fi
+  # shellcheck disable=SC1091
+  source "$VENV_DIR/bin/activate"
+}
+
+install_deps() {
+  ensure_venv
+  log "Installing Python dependencies (this is cached in .venv)..."
+  pip install --quiet --upgrade pip
+  pip install --quiet -r requirements.txt
+
+  if [ ! -d "frontend/node_modules" ]; then
+    log "Installing frontend dependencies..."
+    (cd frontend && npm install --silent)
+  fi
+  ok "Dependencies ready"
+}
+
+# ─── Lifecycle ───────────────────────────────────────────────────────────
 
 stop_all() {
-  log "Stopping all NEXUS services..."
+  log "Stopping NEXUS..."
 
-  # Stop frontend dev server if running
-  pkill -f "vite.*5173" 2>/dev/null || true
-
-  # Stop any locally running uvicorn services
-  pkill -f "uvicorn app.main" 2>/dev/null || true
-
-  # Stop Docker services
-  docker compose -f docker/docker-compose.services.yml down 2>/dev/null || true
-  docker compose -f docker/docker-compose.infra.yml down 2>/dev/null || true
-
-  ok "All services stopped"
-}
-
-# ─── Purge Everything ────────────────────────────────────────────────────
-
-purge_all() {
-  log "Purging containers, volumes, and cached data..."
-
-  stop_all
-
-  # Remove NEXUS containers
-  docker rm -f nexus-kafka nexus-kafka-ui nexus-neo4j nexus-chromadb nexus-redis 2>/dev/null || true
-  docker rm -f nexus-gateway nexus-ingestion nexus-parser nexus-embedding nexus-graph nexus-ai nexus-search 2>/dev/null || true
-
-  # Remove NEXUS volumes
-  docker volume rm docker_kafka_data docker_neo4j_data docker_neo4j_logs docker_chroma_data docker_redis_data 2>/dev/null || true
-
-  # Remove network
-  docker network rm nexus-network 2>/dev/null || true
-
-  # Clear cloned repos
-  rm -rf repos/ 2>/dev/null || true
-
-  ok "Purged all containers, volumes, and data"
-}
-
-# ─── Free Ports ──────────────────────────────────────────────────────────
-
-free_ports() {
-  log "Checking required ports..."
-
-  local PORTS=(9092 8080 7474 7687 8100 6380 8000 8001 8002 8003 8004 8005 8006 5173)
-
-  for port in "${PORTS[@]}"; do
-    local PID
-    PID=$(lsof -ti ":$port" 2>/dev/null || true)
-    if [ -n "$PID" ]; then
-      warn "Port $port in use by PID $PID — killing"
-      kill -9 "$PID" 2>/dev/null || true
-      sleep 0.5
+  for entry in "${SERVICES[@]}"; do
+    svc="${entry%%:*}"
+    pidfile="$PID_DIR/$svc.pid"
+    if [ -f "$pidfile" ]; then
+      pid=$(cat "$pidfile")
+      kill "$pid" 2>/dev/null || true
+      rm -f "$pidfile"
     fi
   done
 
-  ok "All required ports are free"
+  # Frontend + Caddy
+  [ -f "$PID_DIR/frontend.pid" ] && kill "$(cat "$PID_DIR/frontend.pid")" 2>/dev/null || true
+  [ -f "$PID_DIR/caddy.pid" ] && kill "$(cat "$PID_DIR/caddy.pid")" 2>/dev/null || true
+  rm -f "$PID_DIR"/*.pid
+
+  # Nuke any stragglers on known ports
+  pkill -f "uvicorn app.main" 2>/dev/null || true
+  pkill -f "vite.*5173" 2>/dev/null || true
+
+  docker compose -f infra/docker-compose.yml down 2>/dev/null || true
+  ok "Stopped"
 }
 
-# ─── Start Infrastructure ────────────────────────────────────────────────
+purge_all() {
+  log "Purging containers, volumes, and cached data..."
+  stop_all
+  docker volume rm infra_kafka_data infra_neo4j_data infra_neo4j_logs infra_chroma_data infra_redis_data 2>/dev/null || true
+  docker network rm nexus-network 2>/dev/null || true
+  rm -rf repos/ data/ "$LOG_DIR" "$PID_DIR"
+  mkdir -p "$LOG_DIR" "$PID_DIR"
+  ok "Purged"
+}
 
 start_infra() {
   log "Starting infrastructure (Kafka, Neo4j, ChromaDB, Redis)..."
+  docker compose -f infra/docker-compose.yml up -d
 
-  docker compose -f docker/docker-compose.infra.yml up -d
-
-  log "Waiting for Kafka to be healthy (this takes ~30s)..."
-
+  log "Waiting for Kafka to be ready..."
   local MAX_WAIT=90
   local WAITED=0
-
   while [ $WAITED -lt $MAX_WAIT ]; do
     if docker exec nexus-kafka kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1; then
       ok "Kafka is healthy"
@@ -107,147 +131,90 @@ start_infra() {
     fi
     sleep 3
     WAITED=$((WAITED + 3))
-    echo -ne "\r  ⏳ Waiting... ${WAITED}s / ${MAX_WAIT}s"
+    printf "\r  ⏳ Waiting... %ds / %ds" "$WAITED" "$MAX_WAIT"
   done
   echo ""
 
   if [ $WAITED -ge $MAX_WAIT ]; then
-    fail "Kafka failed to start within ${MAX_WAIT}s"
-    docker logs nexus-kafka 2>&1 | tail -10
+    fail "Kafka failed to start"
+    docker logs nexus-kafka 2>&1 | tail -20
     exit 1
   fi
 
-  # Verify other services
-  for svc in nexus-neo4j nexus-chromadb nexus-redis; do
-    if docker ps --format '{{.Names}}' | grep -q "$svc"; then
-      ok "$svc is running"
-    else
-      warn "$svc may not be running"
-    fi
-  done
+  bash scripts/create-topics.sh >/dev/null
+  ok "Topics created"
 }
-
-# ─── Create Kafka Topics ─────────────────────────────────────────────────
-
-create_topics() {
-  log "Creating Kafka topics..."
-
-  local TOPICS=("repo.ingested:3" "file.parsed:6" "embeddings.generated:3" "graph.updated:3" "pr.analyzed:3")
-
-  for entry in "${TOPICS[@]}"; do
-    IFS=':' read -r topic partitions <<< "$entry"
-    docker exec nexus-kafka kafka-topics \
-      --bootstrap-server localhost:9092 \
-      --create --topic "$topic" \
-      --partitions "$partitions" \
-      --replication-factor 1 \
-      --if-not-exists 2>/dev/null && ok "$topic" || warn "$topic (may exist)"
-  done
-}
-
-# ─── Install Dependencies ────────────────────────────────────────────────
-
-install_deps() {
-  log "Installing Python dependencies for all services..."
-
-  local SERVICES=(gateway-service ingestion-service parser-service embedding-service graph-service ai-service search-service)
-
-  for svc in "${SERVICES[@]}"; do
-    if [ -f "$svc/requirements.txt" ]; then
-      echo -n "  📦 $svc... "
-      pip install -q -r "$svc/requirements.txt" 2>/dev/null && echo "done" || echo "failed (non-critical)"
-    fi
-  done
-
-  if [ -d "frontend/node_modules" ]; then
-    ok "Frontend dependencies already installed"
-  else
-    log "Installing frontend dependencies..."
-    (cd frontend && npm install --silent 2>/dev/null)
-    ok "Frontend dependencies installed"
-  fi
-}
-
-# ─── Start Backend Services ──────────────────────────────────────────────
 
 start_services() {
-  log "Starting backend services locally..."
-
-  local SERVICES=(
-    "gateway-service:8000"
-    "ingestion-service:8001"
-    "parser-service:8002"
-    "embedding-service:8003"
-    "graph-service:8004"
-    "ai-service:8005"
-    "search-service:8006"
-  )
+  log "Starting NEXUS services..."
+  load_env
+  ensure_venv
 
   for entry in "${SERVICES[@]}"; do
-    IFS=':' read -r svc port <<< "$entry"
+    svc="${entry%%:*}"
+    port="${entry##*:}"
+    logfile="$LOG_DIR/$svc.log"
+    pidfile="$PID_DIR/$svc.pid"
 
-    echo -n "  🚀 $svc (:$port)... "
-
-    (cd "$svc" && \
-     NEXUS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
-     NEXUS_NEO4J_URI=bolt://localhost:7687 \
-     NEXUS_NEO4J_USERNAME=neo4j \
-     NEXUS_NEO4J_PASSWORD=nexus_password \
-     NEXUS_CHROMA_HOST=localhost \
-     NEXUS_CHROMA_PORT=8100 \
-     NEXUS_REDIS_HOST=localhost \
-     NEXUS_REDIS_PORT=6380 \
-     NEXUS_LLM_MODEL=openrouter/qwen/qwen3-235b-a22b \
-     NEXUS_LLM_API_KEY=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 \
-     NEXUS_SEARCH_SERVICE_URL=http://localhost:8006 \
-     NEXUS_GRAPH_SERVICE_URL=http://localhost:8004 \
-     NEXUS_INGESTION_SERVICE_URL=http://localhost:8001 \
-     nohup uvicorn app.main:app --host 0.0.0.0 --port "$port" \
-       > "/tmp/nexus-${svc}.log" 2>&1 &)
-
-    sleep 1
-    echo "started (PID: $!)"
+    (
+      cd "$svc"
+      PYTHONPATH="$SCRIPT_DIR" \
+      nohup "$VENV_DIR/bin/uvicorn" app.main:app \
+        --host 127.0.0.1 --port "$port" \
+        > "$logfile" 2>&1 &
+      echo $! > "$pidfile"
+    )
+    ok "$svc → http://${svc%-service}.localhost (pid $(cat "$pidfile"))"
   done
 
-  # Wait for services to be ready
   sleep 3
-  log "Verifying services..."
-
+  log "Verifying health..."
   for entry in "${SERVICES[@]}"; do
-    IFS=':' read -r svc port <<< "$entry"
-    if curl -s -o /dev/null -w "" --connect-timeout 2 "http://localhost:$port/health" 2>/dev/null; then
-      ok "$svc (:$port) healthy"
+    svc="${entry%%:*}"
+    port="${entry##*:}"
+    if curl -fsS --max-time 2 "http://127.0.0.1:$port/health" >/dev/null 2>&1; then
+      ok "$svc healthy"
     else
-      warn "$svc (:$port) still starting — check /tmp/nexus-${svc}.log"
+      warn "$svc still starting — tail .logs/$svc.log"
     fi
   done
 }
 
-# ─── Start Frontend ──────────────────────────────────────────────────────
-
 start_frontend() {
-  log "Starting frontend dev server..."
-
-  (cd frontend && VITE_API_URL=http://localhost:8000 \
-    nohup npx vite --port 5173 --host 0.0.0.0 \
-    > /tmp/nexus-frontend.log 2>&1 &)
-
+  log "Starting frontend..."
+  (
+    cd frontend
+    nohup npx vite --port 5173 --host 127.0.0.1 \
+      > "$LOG_DIR/frontend.log" 2>&1 &
+    echo $! > "$PID_DIR/frontend.pid"
+  )
   sleep 2
-  ok "Frontend running at http://localhost:5173"
+  ok "Frontend running on :5173"
 }
 
-# ─── Status Check ────────────────────────────────────────────────────────
+start_caddy() {
+  if ! command -v caddy >/dev/null 2>&1; then
+    warn "caddy not found on PATH. Install it (pacman -S caddy) and rerun — services are still reachable on localhost:<port>."
+    return
+  fi
+  log "Starting Caddy reverse proxy..."
+  nohup caddy run --config infra/Caddyfile --adapter caddyfile \
+    > "$LOG_DIR/caddy.log" 2>&1 &
+  echo $! > "$PID_DIR/caddy.pid"
+  sleep 1
+  ok "Caddy serving *.localhost subdomains"
+}
 
 status_check() {
   echo ""
   echo -e "${BOLD}═══════════════════════════════════════════${NC}"
   echo -e "${BOLD}   NEXUS System Status${NC}"
   echo -e "${BOLD}═══════════════════════════════════════════${NC}"
-  echo ""
 
+  echo ""
   echo -e "${CYAN}Infrastructure:${NC}"
-  for svc in nexus-kafka nexus-neo4j nexus-chromadb nexus-redis nexus-kafka-ui; do
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$svc"; then
+  for svc in nexus-kafka nexus-neo4j nexus-chromadb nexus-redis; do
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^$svc$"; then
       ok "$svc"
     else
       fail "$svc"
@@ -256,70 +223,65 @@ status_check() {
 
   echo ""
   echo -e "${CYAN}Services:${NC}"
-  local PORTS=("gateway:8000" "ingestion:8001" "parser:8002" "embedding:8003" "graph:8004" "ai:8005" "search:8006")
-  for entry in "${PORTS[@]}"; do
-    IFS=':' read -r name port <<< "$entry"
-    if curl -s -o /dev/null --connect-timeout 1 "http://localhost:$port/health" 2>/dev/null; then
-      ok "$name (:$port)"
+  for entry in "${SERVICES[@]}"; do
+    svc="${entry%%:*}"
+    port="${entry##*:}"
+    if curl -fsS --max-time 1 "http://127.0.0.1:$port/health" >/dev/null 2>&1; then
+      ok "$svc (:$port)"
     else
-      fail "$name (:$port)"
+      fail "$svc (:$port)"
     fi
   done
 
   echo ""
-  echo -e "${CYAN}Frontend:${NC}"
-  if curl -s -o /dev/null --connect-timeout 1 "http://localhost:5173" 2>/dev/null; then
-    ok "React app (:5173)"
-  else
-    fail "React app (:5173)"
-  fi
+  echo -e "${CYAN}Subdomains (requires Caddy):${NC}"
+  echo "  Dashboard:   http://nexus.localhost"
+  echo "  API:         http://gateway.localhost"
+  echo "  Graph API:   http://graph.localhost"
+  echo "  Search API:  http://search.localhost"
+  echo "  Kafka UI:    http://kafka.localhost"
+  echo "  Neo4j UI:    http://neo4j.localhost"
+  echo ""
+}
 
-  echo ""
-  echo -e "${CYAN}Links:${NC}"
-  echo "  Dashboard:  http://localhost:5173"
-  echo "  Gateway:    http://localhost:8000/docs"
-  echo "  Kafka UI:   http://localhost:8080"
-  echo "  Neo4j:      http://localhost:7474"
-  echo ""
+tail_logs() {
+  local svc="${1:-}"
+  if [ -z "$svc" ]; then
+    log "Available logs:"
+    ls "$LOG_DIR" 2>/dev/null | sed 's/^/  /'
+    return
+  fi
+  tail -f "$LOG_DIR/$svc.log"
 }
 
 # ─── Main ────────────────────────────────────────────────────────────────
 
 case "${1:-full}" in
   full)
-    echo ""
     echo -e "${BOLD}╔═══════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║   NEXUS — Full System Bootstrap           ║${NC}"
+    echo -e "${BOLD}║   NEXUS — Full Bootstrap                  ║${NC}"
     echo -e "${BOLD}╚═══════════════════════════════════════════╝${NC}"
-    echo ""
     purge_all
-    free_ports
-    start_infra
-    create_topics
     install_deps
+    start_infra
     start_services
     start_frontend
+    start_caddy
     status_check
     ;;
   start)
+    install_deps
     start_infra
-    create_topics
     start_services
     start_frontend
+    start_caddy
     status_check
     ;;
-  stop)
-    stop_all
-    ;;
-  status)
-    status_check
-    ;;
+  stop) stop_all ;;
+  status) status_check ;;
+  logs) tail_logs "${2:-}" ;;
   *)
-    echo "Usage: $0 {full|start|stop|status}"
-    echo "  full   - Purge everything and start fresh"
-    echo "  start  - Start without purging"
-    echo "  stop   - Stop everything"
-    echo "  status - Check system status"
+    echo "Usage: $0 {full|start|stop|status|logs [service]}"
     exit 1
     ;;
 esac
