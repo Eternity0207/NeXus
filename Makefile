@@ -1,85 +1,81 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# NEXUS Makefile — Development workflow commands
+# NEXUS Makefile — thin wrapper around nexus.sh plus dev shortcuts
 # ═══════════════════════════════════════════════════════════════════════════
 
-.PHONY: help infra infra-down services services-down frontend dev health topics clean
+.PHONY: help up down status logs clean infra infra-down topics health \
+        caddy frontend install \
+        run-gateway run-ingestion run-parser run-embedding run-graph run-ai run-search
 
-# Default
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-# ─── Infrastructure ──────────────────────────────────────────────────────
+# ─── Full system ─────────────────────────────────────────────────────────
 
-infra: ## Start infrastructure (Kafka, Neo4j, ChromaDB, Redis)
-	docker compose -f docker/docker-compose.infra.yml up -d
-	@echo "⏳ Waiting for services to be ready..."
+up: ## Start the entire platform (infra + services + frontend + caddy)
+	./nexus.sh start
+
+down: ## Stop everything
+	./nexus.sh stop
+
+status: ## Check system health
+	./nexus.sh status
+
+logs: ## Tail logs — make logs svc=gateway-service
+	./nexus.sh logs $(svc)
+
+clean: ## Purge containers, volumes, logs, cloned repos
+	./nexus.sh stop
+	rm -rf repos/ data/ .logs/ .pids/
+	docker volume prune -f
+
+# ─── Infrastructure only ─────────────────────────────────────────────────
+
+infra: ## Start Kafka, Neo4j, ChromaDB, Redis
+	docker compose -f infra/docker-compose.yml up -d
 	@sleep 10
-	@echo "✅ Infrastructure started"
+	@bash scripts/create-topics.sh
 
-infra-down: ## Stop infrastructure
-	docker compose -f docker/docker-compose.infra.yml down
+infra-down: ## Stop infra containers
+	docker compose -f infra/docker-compose.yml down
 
-# ─── Services ────────────────────────────────────────────────────────────
+topics: ## (Re)create Kafka topics
+	bash scripts/create-topics.sh
 
-services: ## Start all backend services
-	docker compose -f docker/docker-compose.services.yml up -d --build
+health: ## Curl each service's /health endpoint
+	bash scripts/health-check.sh
 
-services-down: ## Stop all backend services
-	docker compose -f docker/docker-compose.services.yml down
+# ─── Dependencies ────────────────────────────────────────────────────────
+
+install: ## Install Python and frontend dependencies
+	python3 -m venv .venv
+	.venv/bin/pip install -U pip
+	.venv/bin/pip install -r requirements.txt
+	cd frontend && npm install
+
+# ─── Caddy ───────────────────────────────────────────────────────────────
+
+caddy: ## Run Caddy in the foreground (subdomain routing)
+	caddy run --config infra/Caddyfile --adapter caddyfile
 
 # ─── Frontend ────────────────────────────────────────────────────────────
 
-frontend: ## Start frontend dev server
+frontend: ## Start the frontend dev server
 	cd frontend && npm run dev
 
-frontend-build: ## Build frontend for production
-	cd frontend && npm run build
+# ─── Individual services (foreground, great for debugging) ───────────────
 
-# ─── Development ─────────────────────────────────────────────────────────
-
-dev: infra ## Start infra + create topics (dev mode)
-	@sleep 5
-	@bash scripts/create-topics.sh 2>/dev/null || true
-	@echo ""
-	@echo "🚀 Infrastructure ready. Start services individually:"
-	@echo "   cd gateway-service && uvicorn app.main:app --port 8000 --reload"
-	@echo "   cd ingestion-service && uvicorn app.main:app --port 8001 --reload"
-	@echo "   cd parser-service && uvicorn app.main:app --port 8002 --reload"
-	@echo "   cd frontend && npm run dev"
-
-topics: ## Create Kafka topics
-	bash scripts/create-topics.sh
-
-health: ## Check all service health
-	bash scripts/health-check.sh
-
-# ─── Cleanup ─────────────────────────────────────────────────────────────
-
-clean: infra-down services-down ## Stop everything and clean up
-	docker volume prune -f
-	rm -rf repos/
-	@echo "🧹 Cleaned up"
-
-# ─── Individual Services ─────────────────────────────────────────────────
-
-run-gateway: ## Run gateway service locally
-	cd gateway-service && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-run-ingestion: ## Run ingestion service locally
-	cd ingestion-service && uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
-
-run-parser: ## Run parser service locally
-	cd parser-service && uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
-
-run-embedding: ## Run embedding service locally
-	cd embedding-service && uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
-
-run-graph: ## Run graph service locally
-	cd graph-service && uvicorn app.main:app --host 0.0.0.0 --port 8004 --reload
-
-run-ai: ## Run AI service locally
-	cd ai-service && uvicorn app.main:app --host 0.0.0.0 --port 8005 --reload
-
-run-search: ## Run search service locally
-	cd search-service && uvicorn app.main:app --host 0.0.0.0 --port 8006 --reload
+run-gateway:    ## Run gateway-service on :8000
+	cd gateway-service && ../.venv/bin/uvicorn app.main:app --port 8000 --reload
+run-ingestion:  ## Run ingestion-service on :8001
+	cd ingestion-service && ../.venv/bin/uvicorn app.main:app --port 8001 --reload
+run-parser:     ## Run parser-service on :8002
+	cd parser-service && ../.venv/bin/uvicorn app.main:app --port 8002 --reload
+run-embedding:  ## Run embedding-service on :8003
+	cd embedding-service && ../.venv/bin/uvicorn app.main:app --port 8003 --reload
+run-graph:      ## Run graph-service on :8004
+	cd graph-service && ../.venv/bin/uvicorn app.main:app --port 8004 --reload
+run-ai:         ## Run ai-service on :8005
+	cd ai-service && ../.venv/bin/uvicorn app.main:app --port 8005 --reload
+run-search:     ## Run search-service on :8006
+	cd search-service && ../.venv/bin/uvicorn app.main:app --port 8006 --reload
