@@ -1,77 +1,76 @@
 # Contributing to NEXUS
 
-## Development Setup
+Thanks for taking the time to look. This doc covers the dev loop and
+conventions; the big picture lives in [README.md](README.md) and the
+full setup is in [Architecture.md](Architecture.md).
 
-### Prerequisites
+## Prerequisites
 
 - Python 3.11+
-- Node.js 18+
-- Docker & Docker Compose
+- Node.js 20+
+- Docker + Docker Compose
+- [Caddy](https://caddyserver.com)
 
-### Quick Start
+## Quick Start
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/Eternity0207/NeXus.git
 cd NeXus
-
-# 2. Copy environment configuration
 cp .env.example .env
-
-# 3. Start infrastructure
-make infra
-
-# 4. Create Kafka topics
-make topics
-
-# 5. Install service dependencies (each service has its own venv)
-cd gateway-service && pip install -r requirements.txt && cd ..
-cd ingestion-service && pip install -r requirements.txt && cd ..
-# ... repeat for each service
-
-# 6. Start services
-make run-gateway    # terminal 1
-make run-ingestion  # terminal 2
-make run-parser     # terminal 3
-# ... etc
-
-# 7. Start frontend
-cd frontend && npm install && npm run dev
+./nexus.sh               # bring everything up
 ```
 
-## Architecture
+That's it — one venv in `.venv/`, one pinned `requirements.txt`, one
+Caddy config. Visit `http://nexus.localhost` for the dashboard and
+`http://gateway.localhost/docs` for the API.
 
-See [docs/architecture.md](docs/architecture.md) for the full system design.
+## Running One Service in the Foreground
+
+Useful while debugging:
+
+```bash
+make run-gateway      # :8000
+make run-ingestion    # :8001
+make run-parser       # :8002
+make run-embedding    # :8003
+make run-graph        # :8004
+make run-ai           # :8005
+make run-search       # :8006
+```
+
+Tail logs from the other services with `./nexus.sh logs <service>`.
 
 ## Code Style
 
-- **Python**: PEP 8, type hints, docstrings on public functions
-- **JavaScript**: ESLint defaults from Vite scaffold
-- **Commits**: Conventional Commits format (`feat:`, `fix:`, `chore:`, `refactor:`)
+- **Python**: PEP 8, type hints on public surfaces, small functions.
+- **JavaScript**: ESLint defaults from the Vite scaffold.
+- **Commits**: [Conventional Commits](https://www.conventionalcommits.org/)
+  — `feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`.
 
 ## Adding a New Service
 
-1. Create a new directory: `my-service/`
-2. Add `app/__init__.py`, `app/config.py`, `app/main.py`
-3. Add health check endpoint at `/health`
-4. Add `requirements.txt`, `Dockerfile`, `README.md`
-5. If consuming Kafka, extend `shared.kafka_consumer.BaseKafkaConsumer`
-6. Add service to `docker/docker-compose.services.yml`
-7. Add proxy route in `gateway-service/app/routes/`
+1. Create `my-service/app/{__init__.py,config.py,main.py}`.
+2. Expose a `/health` endpoint that returns 200.
+3. If the service consumes Kafka, subclass
+   `shared.kafka_consumer.BaseKafkaConsumer` — you get retries, dead
+   letter handling, and metrics for free.
+4. Add the port to `nexus.sh` (`SERVICES` array) and Makefile
+   (`run-<name>`).
+5. Add a subdomain rule in `infra/Caddyfile`.
+6. Add a proxy route in `gateway-service/app/routes/` if the frontend
+   should be able to call it.
 
 ## Adding a New Language Parser
 
-1. Create `parser-service/app/<lang>_parser.py`
-2. Implement `BaseParser` interface from `app/base.py`
-3. Register in `parser-service/app/main.py`
-4. Add extension mapping in `ingestion-service/app/git_ops.py`
+1. Create `parser-service/app/<lang>_parser.py`.
+2. Implement `BaseParser` from `parser-service/app/base.py`.
+3. Register it in `parser-service/app/main.py::_register_all_parsers`.
+4. Add the file extension mapping in
+   `ingestion-service/app/git_ops.py::EXTENSION_LANGUAGE_MAP` so the
+   ingestion step actually picks it up.
 
 ## Testing
 
-```bash
-# Run service-specific tests (when added)
-cd gateway-service && pytest
-
-# Health check all services
-make health
-```
+There's no test suite yet (the backlog in Architecture.md tracks this).
+`make health` is the closest thing to an integration test right now —
+it curls every `/health` endpoint and pings the infra.
