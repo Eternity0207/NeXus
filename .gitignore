@@ -33,11 +33,16 @@ node_modules/
 Thumbs.db
 
 # Docker
-docker/volumes/
+infra/volumes/
 
-# Logs
+# Logs / runtime
 *.log
 logs/
+.logs/
+.pids/
+
+# Local Chroma / data
+data/
 
 # Coverage
 htmlcov/
