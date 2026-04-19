@@ -89,13 +89,13 @@ async def get_repo(repo_id: str) -> dict:
 async def list_repos() -> dict:
     """List all ingested repositories."""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
                 f"{settings.ingestion_service_url}/repos"
             )
             response.raise_for_status()
             return response.json()
-    except httpx.ConnectError:
+    except (httpx.ConnectError, httpx.ReadTimeout):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Ingestion service unavailable",
