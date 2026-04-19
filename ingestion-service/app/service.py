@@ -15,8 +15,15 @@ logger = logging.getLogger("ingestion-service")
 settings = get_settings()
 
 
-async def ingest_repository(repo_id: str, repo_url: str, branch: str = "main") -> dict:
+def ingest_repository(repo_id: str, repo_url: str, branch: str = "main") -> dict:
     """Full ingestion pipeline: clone → extract → publish.
+
+    Declared as a plain sync function on purpose: every step below
+    (GitPython clone, filesystem walk, kafka publish) is blocking.
+    FastAPI's BackgroundTasks runs sync callables in a worker thread,
+    so keeping this sync prevents the service's event loop from being
+    blocked while a repo is being cloned (which would make /repos,
+    /health, etc. time out for the duration of the clone).
 
     Args:
         repo_id: Unique identifier for this ingestion.
