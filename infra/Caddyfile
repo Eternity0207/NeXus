@@ -47,13 +47,29 @@ gateway.localhost, gateway.{$NEXUS_DOMAIN:localhost}, api.localhost {
 }
 
 # ─── Internal services (exposed for devs/debugging, NOT for public prod) ───
-ingestion.localhost { reverse_proxy localhost:8001 }
-parser.localhost    { reverse_proxy localhost:8002 }
-embedding.localhost { reverse_proxy localhost:8003 }
-graph.localhost     { reverse_proxy localhost:8004 }
-ai.localhost        { reverse_proxy localhost:8005 }
-search.localhost    { reverse_proxy localhost:8006 }
+ingestion.localhost {
+    reverse_proxy localhost:8001
+}
+parser.localhost {
+    reverse_proxy localhost:8002
+}
+embedding.localhost {
+    reverse_proxy localhost:8003
+}
+graph.localhost {
+    reverse_proxy localhost:8004
+}
+ai.localhost {
+    reverse_proxy localhost:8005
+}
+search.localhost {
+    reverse_proxy localhost:8006
+}
 
 # ─── Infrastructure dashboards ─────────────────────────────────────────────
-kafka.localhost { reverse_proxy localhost:8080 }
-neo4j.localhost { reverse_proxy localhost:7474 }
+kafka.localhost {
+    reverse_proxy localhost:8080
+}
+neo4j.localhost {
+    reverse_proxy localhost:7474
+}
