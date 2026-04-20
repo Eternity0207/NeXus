@@ -100,3 +100,34 @@ async def list_repos() -> dict:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Ingestion service unavailable",
         )
+
+
+@router.delete(
+    "/{repo_id}",
+    summary="Delete a repository",
+    description="Remove an ingested repository's record and its cloned files.",
+)
+async def delete_repo(repo_id: str) -> dict:
+    """Delete an ingested repository."""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.delete(
+                f"{settings.ingestion_service_url}/repos/{repo_id}"
+            )
+            response.raise_for_status()
+            return response.json()
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Ingestion service unavailable",
+        )
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Repository {repo_id} not found",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Ingestion service returned an error",
+        )

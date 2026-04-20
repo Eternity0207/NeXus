@@ -76,6 +76,10 @@ class RepoStore:
     def list_all(self) -> list[RepoRecord]:
         return list(self._repos.values())
 
+    def delete(self, repo_id: str) -> bool:
+        """Remove the record for a repo. Returns True if it existed."""
+        return self._repos.pop(repo_id, None) is not None
+
 
 # Singleton store
 repo_store = RepoStore()

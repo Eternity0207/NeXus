@@ -1,8 +1,10 @@
 """NEXUS Ingestion Service — Main FastAPI Application."""
 
 import logging
+import shutil
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, status
 from pydantic import BaseModel, Field
@@ -120,6 +122,32 @@ async def list_repos() -> dict:
         "repos": payload,
         "total_files": total_files,
     }
+
+
+@app.delete(
+    "/repos/{repo_id}",
+    summary="Delete a repository",
+    description="Remove the repo record and its cloned files from disk.",
+)
+async def delete_repo(repo_id: str) -> dict:
+    """Remove a repo from the store and wipe the clone directory."""
+    record = repo_store.get(repo_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository {repo_id} not found",
+        )
+
+    clone_dir = (Path(settings.repos_base_path) / repo_id).resolve()
+    try:
+        if clone_dir.exists():
+            shutil.rmtree(clone_dir)
+            logger.info(f"Removed clone directory {clone_dir}")
+    except OSError as e:
+        logger.warning(f"Failed to remove {clone_dir}: {e}")
+
+    repo_store.delete(repo_id)
+    return {"repo_id": repo_id, "status": "deleted"}
 
 
 @app.get("/health")
