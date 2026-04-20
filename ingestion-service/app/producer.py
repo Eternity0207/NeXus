@@ -47,6 +47,7 @@ class IngestionProducer:
         branch: str,
         commit_sha: str,
         files: list[dict],
+        repo_path: str = "",
     ) -> bool:
         """Publish a repo.ingested event.
 
@@ -70,6 +71,7 @@ class IngestionProducer:
             "repo_url": repo_url,
             "branch": branch,
             "commit_sha": commit_sha,
+            "repo_path": repo_path,
             "files": files,
         }
 

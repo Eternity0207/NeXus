@@ -103,8 +103,9 @@ class ParserConsumer:
 
         logger.info(f"Processing repo.ingested: {repo_id} ({len(files)} files)")
 
-        # Determine repo path (matches ingestion service convention)
-        repo_path = f"{settings.repos_base_path}/{repo_id}"
+        # Prefer the absolute path the ingestion service published;
+        # fall back to the local convention for events from older producers.
+        repo_path = event.get("repo_path") or f"{settings.repos_base_path}/{repo_id}"
 
         # Parse all files
         results = parse_repo_files(files, repo_id, repo_path)

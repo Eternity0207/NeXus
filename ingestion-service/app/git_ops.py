@@ -60,7 +60,7 @@ def clone_repository(
     Raises:
         GitCommandError: If cloning fails.
     """
-    clone_path = Path(settings.repos_base_path) / repo_id
+    clone_path = (Path(settings.repos_base_path) / repo_id).resolve()
     
     # Clean up if previous clone exists
     if clone_path.exists():

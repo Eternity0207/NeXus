@@ -65,6 +65,7 @@ def ingest_repository(repo_id: str, repo_url: str, branch: str = "main") -> dict
             branch=branch,
             commit_sha=commit_sha,
             files=files,
+            repo_path=str(repo_path),
         )
 
         if success:
