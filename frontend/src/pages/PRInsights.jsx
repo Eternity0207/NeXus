@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { useRepo } from '../context/useRepo';
+import RepoPicker from '../components/RepoPicker';
 
 export default function PRInsights() {
+  const { activeRepoId } = useRepo();
   const [prUrl, setPrUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [prs, setPrs] = useState([]);
@@ -12,7 +15,7 @@ export default function PRInsights() {
 
     setLoading(true);
     try {
-      const data = await api.analyzePR('default', prUrl);
+      const data = await api.analyzePR(activeRepoId || 'default', prUrl);
       if (data) {
         setPrs(prev => [data, ...prev]);
       }
@@ -50,7 +53,8 @@ export default function PRInsights() {
 
       {/* Analyze Form */}
       <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <form onSubmit={handleAnalyze}>
+        <RepoPicker />
+        <form onSubmit={handleAnalyze} style={{ marginTop: '0.75rem' }}>
           <div className="input-group">
             <input
               className="input"

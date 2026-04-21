@@ -52,6 +52,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ repo_url: repoUrl, branch }),
     }),
+  deleteRepo: (id) =>
+    request(`/api/v1/repos/${id}`, { method: 'DELETE' }),
 
   search: (query, repoId = null, topK = 10) =>
     request('/api/v1/search', {

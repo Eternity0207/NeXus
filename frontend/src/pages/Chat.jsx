@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { api } from '../api';
+import { useRepo } from '../context/useRepo';
+import RepoPicker from '../components/RepoPicker';
 
 export default function Chat() {
+  const { activeRepoId } = useRepo();
   const [messages, setMessages] = useState([
     { role: 'assistant', content: 'Hello! I\'m **NEXUS AI** — your codebase intelligence assistant.\n\nI can help you understand your code, find functions, explain architecture, and suggest improvements.\n\nIngest a repository first, then ask me anything about it.' },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [repoId, setRepoId] = useState('');
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -24,7 +26,7 @@ export default function Chat() {
     setLoading(true);
 
     try {
-      const data = await api.chat(userMsg, repoId || 'default');
+      const data = await api.chat(userMsg, activeRepoId || 'default');
       const reply = data?.reply || 'Sorry, I couldn\'t process that request. Make sure the backend services are running.';
       setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
     } catch {
@@ -54,6 +56,15 @@ export default function Chat() {
       <div className="page-header">
         <h1 className="page-title">AI Chat</h1>
         <p className="page-subtitle">Ask questions about your codebase — powered by RAG + LLM</p>
+      </div>
+
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <RepoPicker />
+        {!activeRepoId && (
+          <p className="hint-line">
+            Pick a repository above to give the assistant context. Without one, it replies with general knowledge only.
+          </p>
+        )}
       </div>
 
       <div className="card chat-container">

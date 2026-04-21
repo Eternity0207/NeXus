@@ -53,3 +53,5 @@ coverage/
 *.db
 *.sqlite3
 repos/
+temp_auto_push.bat
+temp_interactive_push.bat

@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { useRepo } from '../context/useRepo';
+import RepoPicker from '../components/RepoPicker';
 
 export default function Search() {
+  const { activeRepoId } = useRepo();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [topK, setTopK] = useState(10);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -15,7 +19,7 @@ export default function Search() {
     setSearched(true);
 
     try {
-      const data = await api.search(query);
+      const data = await api.search(query, activeRepoId || null, topK);
       setResults(data?.results || []);
     } catch {
       setResults([]);
@@ -38,9 +42,23 @@ export default function Search() {
         <p className="page-subtitle">Search your codebase using natural language — powered by vector similarity</p>
       </div>
 
-      {/* Search Bar */}
       <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <form onSubmit={handleSearch}>
+        <div className="search-controls">
+          <RepoPicker />
+          <label className="depth-control">
+            <span>Top K</span>
+            <input
+              type="range"
+              min="3"
+              max="25"
+              value={topK}
+              onChange={(e) => setTopK(Number(e.target.value))}
+            />
+            <span className="depth-value">{topK}</span>
+          </label>
+        </div>
+
+        <form onSubmit={handleSearch} style={{ marginTop: '0.75rem' }}>
           <div className="input-group">
             <input
               className="input"
@@ -54,14 +72,18 @@ export default function Search() {
               {loading ? <><span className="spinner" style={{ width: 16, height: 16, marginRight: '0.5rem' }} /> Searching</> : '🔍 Search'}
             </button>
           </div>
+          {!activeRepoId && (
+            <p className="hint-line">
+              Tip — pick a repository above to scope the search. Without a repo, results come from the global index.
+            </p>
+          )}
         </form>
       </div>
 
-      {/* Results */}
       {loading && (
         <div className="loading">
           <span className="spinner" />
-          Searching across embeddings...
+          Searching across embeddings…
         </div>
       )}
 
@@ -93,7 +115,7 @@ export default function Search() {
           {results.map((result, idx) => (
             <div className="search-result" key={idx}>
               <div className="search-result-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                   <span className="search-result-path">{result.file_path}</span>
                   <span className="badge badge-primary" style={{ fontSize: '0.65rem' }}>
                     {result.metadata?.type || 'code'}

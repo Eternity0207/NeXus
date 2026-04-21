@@ -1,4 +1,6 @@
 import { NavLink } from 'react-router-dom';
+import { useRepo } from '../context/useRepo';
+import CopyButton from './CopyButton';
 
 const navItems = [
   { path: '/', icon: '📊', label: 'Overview' },
@@ -9,6 +11,8 @@ const navItems = [
 ];
 
 export default function Sidebar() {
+  const { activeRepoId, setActiveRepoId } = useRepo();
+
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -32,13 +36,27 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-subtle)' }}>
-        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-          Codebase Intelligence
+      {activeRepoId && (
+        <div className="sidebar-active-repo">
+          <div className="sidebar-active-repo-label">Active repository</div>
+          <div className="sidebar-active-repo-row">
+            <code title={activeRepoId}>{activeRepoId.slice(0, 8)}…</code>
+            <CopyButton value={activeRepoId} label="Repo ID" compact />
+            <button
+              type="button"
+              className="sidebar-active-repo-clear"
+              onClick={() => setActiveRepoId('')}
+              title="Clear active repository"
+            >
+              ✕
+            </button>
+          </div>
         </div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-          v0.1.0
-        </div>
+      )}
+
+      <div className="sidebar-footer">
+        <div className="sidebar-footer-label">Codebase Intelligence</div>
+        <div className="sidebar-footer-version">v0.1.0</div>
       </div>
     </aside>
   );
